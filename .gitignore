@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# HVAC Scanner specific
+*.db
+*.sqlite
+temp/
+tmp/
