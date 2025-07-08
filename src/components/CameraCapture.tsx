@@ -563,7 +563,6 @@ export default function CameraCapture({
         accept="image/*"
         onChange={handleFileUpload}
         className="hidden"
-        capture="environment"
       />
     </div>
   );
