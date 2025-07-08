@@ -36,6 +36,7 @@ export default function CameraCapture({
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [captures, setCaptures] = useState<CameraCapture[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingTime, setProcessingTime] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">(
@@ -88,13 +89,29 @@ export default function CameraCapture({
       const canvas = document.createElement("canvas");
       const video = videoRef.current;
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const maxSize = 1200;
+      let width = video.videoWidth;
+      let height = video.videoHeight;
+
+      if (width > height) {
+        if (width > maxSize) {
+          height = (height * maxSize) / width;
+          width = maxSize;
+        }
+      } else {
+        if (height > maxSize) {
+          width = (width * maxSize) / height;
+          height = maxSize;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
 
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Could not create canvas context");
 
-      ctx.drawImage(video, 0, 0);
+      ctx.drawImage(video, 0, 0, width, height);
 
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob(
@@ -103,7 +120,7 @@ export default function CameraCapture({
             else reject(new Error("Could not create image"));
           },
           "image/jpeg",
-          0.9
+          0.8
         );
       });
 
@@ -132,33 +149,104 @@ export default function CameraCapture({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const newCapture: CameraCapture = {
-      file,
-      preview: URL.createObjectURL(file),
-      timestamp: new Date(),
-    };
+    const compressedFile = compressImage(file);
 
-    setCaptures((prev) => [...prev, newCapture]);
+    compressedFile.then((compressed) => {
+      const newCapture: CameraCapture = {
+        file: compressed,
+        preview: URL.createObjectURL(compressed),
+        timestamp: new Date(),
+      };
 
-    if (type === "label") {
-      processLabelImage(file);
-    }
+      setCaptures((prev) => [...prev, newCapture]);
+
+      if (type === "label") {
+        processLabelImage(compressed);
+      }
+    });
+  };
+
+  const compressImage = async (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const img = document.createElement("img");
+
+      img.onload = () => {
+        const maxSize = 1200;
+        let { width, height } = img;
+
+        if (width > height) {
+          if (width > maxSize) {
+            height = (height * maxSize) / width;
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width = (width * maxSize) / height;
+            height = maxSize;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name, {
+                  type: "image/jpeg",
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                resolve(file);
+              }
+            },
+            "image/jpeg",
+            0.8
+          );
+        } else {
+          resolve(file);
+        }
+
+        URL.revokeObjectURL(img.src);
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(img.src);
+        resolve(file);
+      };
+      img.src = URL.createObjectURL(file);
+    });
   };
 
   const processLabelImage = async (file: File) => {
     setIsProcessing(true);
     setError(null);
+    setProcessingTime(null);
 
     try {
       console.log("Processing image with OpenAI...", file.name);
       const result = await openAIService.scanLabel(file);
       console.log("OpenAI result:", result);
 
+      setProcessingTime(result.processingTime);
+
       if (result.confidence > 0.3) {
         console.log("Extracted data:", result.extractedData);
 
+        const enhancedData: HVACEquipmentWithMetadata = {
+          ...result.extractedData,
+          processingTime: result.processingTime,
+          scanConfidence: result.confidence,
+        };
+
         setTimeout(() => {
-          onCapture(result.extractedData);
+          onCapture(enhancedData);
         }, 1500);
       } else {
         setError(
@@ -182,6 +270,7 @@ export default function CameraCapture({
   const processEquipmentImages = async (files: File[]) => {
     setIsProcessing(true);
     setError(null);
+    setProcessingTime(null);
 
     try {
       console.log(
@@ -191,6 +280,8 @@ export default function CameraCapture({
       );
       const result = await openAIService.analyzeEquipment(files);
       console.log("Analysis result:", result);
+
+      setProcessingTime(result.processingTime);
 
       const inspectionReport: InspectionReport = {
         id: Date.now().toString(),
@@ -295,6 +386,8 @@ export default function CameraCapture({
                   refrigerantType: "R-410A",
                   seerRating: 16,
                   manufactureDate: "2023-06-15",
+                  processingTime: 2800,
+                  scanConfidence: 0.92,
                   fieldMetadata: {
                     brand: { source: "scanned", confidence: 0.95 },
                     model: { source: "scanned", confidence: 0.92 },
@@ -364,9 +457,17 @@ export default function CameraCapture({
               </p>
               <p className="text-sm text-gray-600 mt-2">
                 {type === "label"
-                  ? "Extracting data from label with AI"
-                  : "Detecting failures and generating recommendations with AI"}
+                  ? "Extracting label data with AI"
+                  : "Detecting issues and generating recommendations with AI"}
               </p>
+
+              {processingTime && (
+                <div className="mt-3 p-2 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-700">
+                    ⚡ AI response: {(processingTime / 1000).toFixed(1)}s
+                  </p>
+                </div>
+              )}
 
               {type === "label" && (
                 <button
@@ -386,6 +487,8 @@ export default function CameraCapture({
                       amperage: "15.2A",
                       refrigerantType: "R-410A",
                       seerRating: 16,
+                      processingTime: 2500,
+                      scanConfidence: 0.89,
                       fieldMetadata: {
                         brand: { source: "scanned", confidence: 0.95 },
                         model: { source: "scanned", confidence: 0.92 },
@@ -397,6 +500,7 @@ export default function CameraCapture({
                         btu: { source: "scanned", confidence: 0.9 },
                       },
                     };
+                    setProcessingTime(2500);
                     setIsProcessing(false);
                     setTimeout(() => onCapture(mockData), 500);
                   }}
@@ -422,11 +526,18 @@ export default function CameraCapture({
           <div className="absolute top-20 left-4 right-4 bg-green-600 text-white p-4 rounded-lg">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5" />
-              <p>
-                {type === "label"
-                  ? "✅ Data extracted successfully. Redirecting to form..."
-                  : `${captures.length} photo(s) captured`}
-              </p>
+              <div className="flex-1">
+                <p>
+                  {type === "label"
+                    ? "✅ Data extracted successfully. Redirecting to form..."
+                    : `${captures.length} photo(s) captured`}
+                </p>
+                {processingTime && (
+                  <p className="text-sm text-green-200 mt-1">
+                    ⚡ Processed in {(processingTime / 1000).toFixed(1)} seconds
+                  </p>
+                )}
+              </div>
             </div>
 
             {type === "equipment" && captures.length > 0 && (
@@ -504,6 +615,7 @@ export default function CameraCapture({
                     createdAt: new Date(),
                     completedAt: new Date(),
                   };
+                  setProcessingTime(3500);
                   onCapture(mockReport);
                 }}
                 className="w-full mt-2 bg-orange-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-orange-600 transition-colors"

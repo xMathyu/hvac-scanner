@@ -190,9 +190,23 @@ export default function EquipmentForm({
                 <h3 className="text-green-800 font-semibold text-lg mb-1">
                   ✨ AI Extracted Data
                 </h3>
-                <p className="text-green-700 text-sm mb-3">
-                  Fields automatically detected from the label:
-                </p>
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <p className="text-green-700 text-sm">
+                    Fields automatically detected from the label:
+                  </p>
+                  {initialData?.processingTime && (
+                    <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full border border-blue-200">
+                      ⚡ Processed in{" "}
+                      {(initialData.processingTime / 1000).toFixed(1)}s
+                    </span>
+                  )}
+                  {initialData?.scanConfidence && (
+                    <span className="bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded-full border border-purple-200">
+                      🎯 {Math.round(initialData.scanConfidence * 100)}%
+                      confidence
+                    </span>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 gap-2 text-sm">
                   {Object.entries(initialData).map(([key, value]) => {
@@ -263,14 +277,20 @@ export default function EquipmentForm({
                   })}
                 </div>
 
-                <p className="text-green-800 text-xs mt-3 font-medium flex items-center">
+                <p className="text-green-800 text-xs mt-3 font-medium flex items-center flex-wrap gap-4">
                   <span>💡 You can edit any field if necessary</span>
-                  <span className="ml-4 text-purple-900 font-semibold">
+                  <span className="text-purple-900 font-semibold">
                     🤖 = AI Inferred
                   </span>
-                  <span className="ml-2 text-blue-900 font-semibold">
+                  <span className="text-blue-900 font-semibold">
                     👁 = Scanned
                   </span>
+                  {initialData?.processingTime && (
+                    <span className="text-gray-700 font-medium bg-gray-100 px-2 py-1 rounded">
+                      AI Response:{" "}
+                      {(initialData.processingTime / 1000).toFixed(1)}s
+                    </span>
+                  )}
                 </p>
               </div>
             </div>

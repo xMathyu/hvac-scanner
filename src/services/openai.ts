@@ -103,13 +103,13 @@ class OpenAIService {
                 type: "image_url",
                 image_url: {
                   url: `data:image/jpeg;base64,${base64Image}`,
-                  detail: "high",
+                  detail: "low",
                 },
               },
             ],
           },
         ],
-        max_tokens: 1000,
+        max_tokens: 800,
         temperature: 0.1,
       });
 
@@ -271,7 +271,7 @@ class OpenAIService {
         type: "image_url" as const,
         image_url: {
           url: `data:image/jpeg;base64,${base64Image}`,
-          detail: "high" as const,
+          detail: "low" as const,
         },
       }));
 
@@ -289,7 +289,7 @@ class OpenAIService {
             ],
           },
         ],
-        max_tokens: 2000,
+        max_tokens: 1500,
         temperature: 0.1,
       });
 
@@ -394,13 +394,54 @@ class OpenAIService {
 
   private async fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const base64 = result.split(",")[1];
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const img = document.createElement("img");
+
+      img.onload = () => {
+        const maxSize = 800;
+        let { width, height } = img;
+
+        if (width > height) {
+          if (width > maxSize) {
+            height = (height * maxSize) / width;
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width = (width * maxSize) / height;
+            height = maxSize;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        if (!ctx) {
+          URL.revokeObjectURL(img.src);
+          reject(new Error("Could not create canvas context"));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        const base64 = dataUrl.split(",")[1];
+
+        URL.revokeObjectURL(img.src);
         resolve(base64);
       };
-      reader.onerror = reject;
+
+      img.onerror = () => {
+        URL.revokeObjectURL(img.src);
+        reject(new Error("Error loading image"));
+      };
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        img.src = reader.result as string;
+      };
+      reader.onerror = () => reject(new Error("Error reading file"));
       reader.readAsDataURL(file);
     });
   }

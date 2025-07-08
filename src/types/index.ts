@@ -42,6 +42,8 @@ export interface HVACEquipmentWithMetadata extends HVACEquipment {
       "id" | "createdAt" | "updatedAt" | "location" | "notes"
     >]?: FieldMetadata;
   };
+  processingTime?: number;
+  scanConfidence?: number;
 }
 
 export interface LabelScanResult {
