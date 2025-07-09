@@ -33,60 +33,109 @@ class OpenAIService {
       const base64Image = await this.fileToBase64(imageFile);
 
       const prompt = `
-        Analyze this HVAC equipment label image and extract ALL visible information.
+        You are an expert HVAC technician with 20+ years of experience reading equipment labels. Analyze this HVAC equipment nameplate/label image very carefully and extract ALL visible text and information.
+
+        READING INSTRUCTIONS:
+        1. Read EVERY piece of text visible on the label, including small print, codes, numbers, and symbols
+        2. Look at the ENTIRE image, not just the center - check corners, edges, and background areas
+        3. Pay special attention to faded, partially obscured, or small text
+        4. If text is unclear, make your best educated guess based on context and HVAC industry standards
+        5. Look for information in multiple formats (full words, abbreviations, codes)
+
+        SPECIFIC FIELDS TO FIND:
         
-        Look specifically for:
-        - Brand/Manufacturer
-        - Model
-        - Serial Number
-        - Capacity/BTU/Tons
-        - Manufacturing Date
-        - Voltage
-        - Amperage/Amps
-        - Refrigerant Type (R-22, R-410A, etc.)
-        - SEER/EER Efficiency
-        - Equipment Type (AC, Heat Pump, Furnace, etc.)
+        BRAND/MANUFACTURER:
+        - Look for: Company logos, brand names (Carrier, Trane, Lennox, York, Goodman, Rheem, Ruud, Bryant, Payne, etc.)
+        - Often appears at top of label or as watermark
         
-        CAPACITY INFERENCE:
-        If the capacity in tons is NOT explicitly written on the label, but you can infer it from the model or BTU:
-        1. Use the model to determine capacity (many models include capacity in code)
-        2. Or convert BTU to tons (12,000 BTU = 1 ton)
-        3. Clearly mark that it was inferred
+        MODEL NUMBER:
+        - Look for: "Model", "Mod", "Model No", "Model #", or standalone alphanumeric codes
+        - Often includes letters and numbers (e.g., 24ACC636A003, RTU-50TC, etc.)
+        - May be on multiple lines
         
-        IMPORTANT: Respond ONLY with valid JSON, no additional text, no markdown code blocks, no \`\`\`json.
+        SERIAL NUMBER:
+        - Look for: "Serial", "Ser", "Serial No", "Serial #", "S/N", or standalone number sequences
+        - Usually longer numeric sequences, may include letters
         
-        Exact required format:
+        CAPACITY/TONNAGE:
+        - Look for: "Tons", "Ton", "Capacity", "Cap", "BTU/H", "BTUH", "Cooling Capacity"
+        - Numbers like: 2T, 3T, 4T, 5T or 24000, 36000, 48000, 60000 BTU
+        - May be written as "024", "036", "048" in model numbers (divide by 12 for tons)
+        
+        BTU RATING:
+        - Look for: "BTU", "BTUH", "BTU/H", "Cooling", "Heating"
+        - Numbers typically: 18000, 24000, 36000, 48000, 60000, etc.
+        
+        ELECTRICAL SPECIFICATIONS:
+        - VOLTAGE: Look for "V", "Volt", "Volts", numbers like 115, 208, 220, 230, 240, 460
+        - AMPERAGE: Look for "A", "Amp", "Amps", "FLA", "RLA", "MCA", "Max Fuse"
+        - PHASE: Look for "1Ø", "3Ø", "Single Phase", "Three Phase"
+        - HERTZ: Look for "Hz", "60Hz", "50Hz"
+        
+        REFRIGERANT:
+        - Look for: "Refrigerant", "Ref", "R-22", "R-410A", "R-404A", "R-134a", "R-407C"
+        - May be abbreviated as just "R22", "410A", etc.
+        
+        EFFICIENCY RATINGS:
+        - SEER: Look for "SEER", numbers like 13, 14, 15, 16, 17, 18, 19, 20+
+        - EER: Look for "EER", numbers like 10, 11, 12, 13, 14+
+        - AHRI: Look for "AHRI" followed by certification numbers
+        
+        DATES:
+        - Manufacturing: Look for "Mfg", "Date", "Manufactured", or date formats
+        - May be coded in serial number or separate field
+        - Common formats: MM/YY, MM/YYYY, YYYY-MM-DD, or week/year codes
+        
+        EQUIPMENT TYPE:
+        - Look for: "Air Conditioner", "Heat Pump", "Furnace", "RTU", "Package Unit", "Split System"
+        - Infer from model codes: AC, HP, RTU, PU, SS, etc.
+        
+        ADDITIONAL INFORMATION:
+        - Location/Installation codes
+        - Certification marks (UL, ETL, AHRI, etc.)
+        - Weight specifications
+        - Sound ratings
+        - Any other technical specifications
+        
+        CAPACITY INFERENCE RULES:
+        - If model contains "024" = 2 tons (24,000 BTU)
+        - If model contains "036" = 3 tons (36,000 BTU)  
+        - If model contains "048" = 4 tons (48,000 BTU)
+        - If model contains "060" = 5 tons (60,000 BTU)
+        - Divide BTU by 12,000 to get tons
+        - Look for context clues in surrounding text
+        
+        OUTPUT FORMAT - Return ONLY valid JSON, no markdown, no code blocks:
         {
-          "extractedText": "all visible text on the label",
+          "extractedText": "ALL visible text from the label, line by line",
           "structuredData": {
-            "brand": "found brand or null",
-            "model": "found model or null",
+            "brand": "manufacturer name or null",
+            "model": "complete model number or null", 
             "serialNumber": "serial number or null",
-            "capacity": "capacity with units or null",
+            "capacity": "capacity with units (e.g., '3 tons', '36,000 BTU') or null",
             "btu": integer_number_or_null,
             "manufactureDate": "date in YYYY-MM-DD format or null",
-            "voltage": "voltage with units or null",
-            "amperage": "amperage with units or null",
-            "refrigerantType": "refrigerant type or null",
+            "voltage": "voltage with units (e.g., '208-230V') or null", 
+            "amperage": "amperage with units (e.g., '15.2A') or null",
+            "refrigerantType": "refrigerant type (e.g., 'R-410A') or null",
             "seerRating": decimal_number_or_null,
             "eerRating": decimal_number_or_null,
-            "equipmentType": "air_conditioner|heat_pump|furnace|ductwork|other or null"
+            "equipmentType": "air_conditioner|heat_pump|furnace|package_unit|split_system|mini_split|other or null"
           },
           "fieldMetadata": {
-            "brand": {"source": "scanned|ai_inferred", "confidence": 0.0-1.0},
-            "model": {"source": "scanned|ai_inferred", "confidence": 0.0-1.0},
-            "capacity": {"source": "scanned|ai_inferred", "confidence": 0.0-1.0, "inferenceBasis": "explanation if inferred"},
-            // ... rest of fields that have data
+            "field_name": {"source": "scanned|ai_inferred", "confidence": 0.0-1.0, "inferenceBasis": "explanation if inferred"}
           },
-          "confidence": number_between_0_and_1
+          "confidence": number_between_0_and_1_overall_confidence
         }
         
-        In fieldMetadata:
-        - "scanned": the data is clearly visible on the label
-        - "ai_inferred": the data was inferred by logic (e.g.: capacity from model or BTU)
-        - "inferenceBasis": explains how it was inferred (e.g.: "Inferred from model XYZ-24" or "Calculated from 24000 BTU")
+        CONFIDENCE GUIDELINES:
+        - 0.9-1.0: Text is crystal clear and unambiguous
+        - 0.7-0.9: Text is clearly readable with minor uncertainty
+        - 0.5-0.7: Text is somewhat readable but may have interpretation
+        - 0.3-0.5: Text is partially obscured but educated guess possible
+        - 0.0-0.3: Text is very unclear or heavily damaged
         
-        If you can't read something clearly, put it as null. Be conservative with confidence.
+        Be thorough and extract every piece of information you can see, even if partially obscured.
       `;
 
       const response = await this.client.chat.completions.create({
@@ -103,14 +152,14 @@ class OpenAIService {
                 type: "image_url",
                 image_url: {
                   url: `data:image/jpeg;base64,${base64Image}`,
-                  detail: "low",
+                  detail: "high",
                 },
               },
             ],
           },
         ],
-        max_tokens: 800,
-        temperature: 0.1,
+        max_tokens: 1500,
+        temperature: 0.05,
       });
 
       const content = response.choices[0]?.message?.content;
@@ -125,7 +174,15 @@ class OpenAIService {
       try {
         parsedResponse = JSON.parse(cleanedContent);
 
+        if (!parsedResponse.structuredData) {
+          console.warn(
+            "Missing structuredData in response, creating empty structure"
+          );
+          parsedResponse.structuredData = {};
+        }
+
         if (!parsedResponse.fieldMetadata) {
+          console.log("Generating field metadata from structured data");
           parsedResponse.fieldMetadata = {};
 
           Object.keys(parsedResponse.structuredData || {}).forEach((key) => {
@@ -140,6 +197,13 @@ class OpenAIService {
             }
           });
         }
+
+        if (
+          parsedResponse.confidence === undefined ||
+          parsedResponse.confidence === null
+        ) {
+          parsedResponse.confidence = 0.6;
+        }
       } catch (parseError) {
         console.error("Error parsing JSON:", parseError);
         console.error("Content that caused the error:", cleanedContent);
@@ -149,6 +213,10 @@ class OpenAIService {
           try {
             parsedResponse = JSON.parse(jsonMatch[0]);
             console.log("JSON extracted successfully with regex");
+
+            if (!parsedResponse.structuredData) {
+              parsedResponse.structuredData = {};
+            }
 
             if (!parsedResponse.fieldMetadata) {
               parsedResponse.fieldMetadata = {};
@@ -166,11 +234,19 @@ class OpenAIService {
                 }
               );
             }
-          } catch {
+
+            if (
+              parsedResponse.confidence === undefined ||
+              parsedResponse.confidence === null
+            ) {
+              parsedResponse.confidence = 0.6;
+            }
+          } catch (secondParseError) {
+            console.error("Second parsing attempt failed:", secondParseError);
             throw new Error(
-              `Could not parse OpenAI response. Content: ${cleanedContent.substring(
+              `Could not parse OpenAI response after multiple attempts. Content: ${cleanedContent.substring(
                 0,
-                200
+                300
               )}...`
             );
           }
@@ -178,7 +254,7 @@ class OpenAIService {
           throw new Error(
             `OpenAI response does not contain valid JSON: ${cleanedContent.substring(
               0,
-              200
+              300
             )}...`
           );
         }
@@ -399,7 +475,7 @@ class OpenAIService {
       const img = document.createElement("img");
 
       img.onload = () => {
-        const maxSize = 800;
+        const maxSize = 1600;
         let { width, height } = img;
 
         if (width > height) {
@@ -423,9 +499,35 @@ class OpenAIService {
           return;
         }
 
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+
         ctx.drawImage(img, 0, 0, width, height);
 
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const factor = 1.2;
+          data[i] = Math.min(255, Math.max(0, (data[i] - 128) * factor + 128));
+          data[i + 1] = Math.min(
+            255,
+            Math.max(0, (data[i + 1] - 128) * factor + 128)
+          );
+          data[i + 2] = Math.min(
+            255,
+            Math.max(0, (data[i + 2] - 128) * factor + 128)
+          );
+
+          const brightness = 10;
+          data[i] = Math.min(255, data[i] + brightness);
+          data[i + 1] = Math.min(255, data[i + 1] + brightness);
+          data[i + 2] = Math.min(255, data[i + 2] + brightness);
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
         const base64 = dataUrl.split(",")[1];
 
         URL.revokeObjectURL(img.src);

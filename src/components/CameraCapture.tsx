@@ -89,7 +89,7 @@ export default function CameraCapture({
       const canvas = document.createElement("canvas");
       const video = videoRef.current;
 
-      const maxSize = 1200;
+      const maxSize = 1600;
       let width = video.videoWidth;
       let height = video.videoHeight;
 
@@ -111,6 +111,9 @@ export default function CameraCapture({
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Could not create canvas context");
 
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
       ctx.drawImage(video, 0, 0, width, height);
 
       const blob = await new Promise<Blob>((resolve, reject) => {
@@ -120,7 +123,7 @@ export default function CameraCapture({
             else reject(new Error("Could not create image"));
           },
           "image/jpeg",
-          0.8
+          0.95
         );
       });
 
@@ -173,7 +176,7 @@ export default function CameraCapture({
       const img = document.createElement("img");
 
       img.onload = () => {
-        const maxSize = 1200;
+        const maxSize = 1600;
         let { width, height } = img;
 
         if (width > height) {
@@ -192,6 +195,9 @@ export default function CameraCapture({
         canvas.height = height;
 
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+
           ctx.drawImage(img, 0, 0, width, height);
 
           canvas.toBlob(
@@ -207,7 +213,7 @@ export default function CameraCapture({
               }
             },
             "image/jpeg",
-            0.8
+            0.95
           );
         } else {
           resolve(file);
